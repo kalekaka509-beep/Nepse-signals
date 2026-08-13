@@ -3,46 +3,36 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>NEPSE Voice Alert Pro - 3 Proxy</title>
+<title>NEPSE Voice Alert Pro - API</title>
 <style>
 * { margin: 0; padding: 0; }
 body { background: #0a0e27; color: white; font-family: Arial; padding: 10px; }
 .header { background: linear-gradient(135deg, #DC143C, #8B0000); padding: 15px; text-align: center; border-radius: 12px; }
 .sound-on { background: #00ff88; color:#000; padding: 12px; text-align:center; border-radius:10px; margin:10px 0; font-weight:bold; }
-.stats { display: flex; gap: 8px; margin: 10px 0; }
-.stat-box { flex:1; background:#131a33; padding:12px; border-radius:10px; text-align:center; border:2px solid #00d4ff; }
-.price-board { background: #131a33; padding: 20px; border-radius: 15px; margin: 10px 0; border: 3px solid #00d4ff; text-align:center; }
-.price-main { font-size: 42px; font-weight: bold; color:#00d4ff; }
-select, button { width: 100%; padding: 15px; margin: 8px 0; font-size: 16px; background: #131a33; color: white; border: 2px solid #00d4ff; border-radius: 12px; }
+.price-board { background: #131a33; padding: 25px; border-radius: 15px; margin: 10px 0; border: 3px solid #00d4ff; text-align:center; }
+.price-main { font-size: 48px; font-weight: bold; color:#00d4ff; }
+select, button { width: 100%; padding: 16px; margin: 8px 0; font-size: 17px; background: #131a33; color: white; border: 2px solid #00d4ff; border-radius: 12px; }
 .buy-sell-box { display: flex; gap: 10px; }
-.box { flex: 1; padding: 18px; border-radius: 12px; text-align: center; font-size:18px; }
-.buy-box { background: #0f2a1a; border: 2px solid #00ff88; }
-.sell-box { background: #3a1a1a; border: 2px solid #ff4d4d; }
+.box { flex: 1; padding: 20px; border-radius: 12px; text-align: center; font-size:20px; font-weight:bold; }
+.buy-box { background: #0f2a1a; border: 3px solid #00ff88; }
+.sell-box { background: #3a1a1a; border: 3px solid #ff4d4d; }
 .scan-btn { background: #00d4ff; color: #000; font-weight: bold; }
 .up { color: #00ff88; }.down { color: #ff4d4d; }
-.loading { color: #00d4ff; animation: blink 1s infinite; }
-@keyframes blink { 50%{opacity:0.3} }
 </style>
 </head>
 <body>
 
 <div class="header">
-  <h1>🇳🇵 NEPSE Voice Alert Pro</h1>
+  <h1>🇳🇵 NEPSE Live Price</h1>
   <p id="marketStatus">Market: Checking...</p>
 </div>
 
-<div class="sound-on">🔊 Sound Alert: ON</div>
-
-<div class="stats">
-  <div class="stat-box">Total<br><b id="total">0</b></div>
-  <div class="stat-box">Win Rate<br><b id="winrate">0%</b></div>
-  <div class="stat-box">Profit<br><b id="profit">Rs.0</b></div>
-</div>
+<div class="sound-on">🔊 Voice Alert: ON</div>
 
 <div class="price-board">
   <div id="stockName">NEPSE</div>
-  <div id="livePrice" class="price-main loading">Loading...</div>
-  <div id="priceChange">--.-- (-%)</div>
+  <div id="livePrice" class="price-main">Loading...</div>
+  <div id="priceChange">--</div>
 </div>
 
 <select id="stock" onchange="loadData()">
@@ -51,93 +41,66 @@ select, button { width: 100%; padding: 15px; margin: 8px 0; font-size: 16px; bac
   <option value="SCB">SCB</option>
   <option value="NICL">NICL</option>
   <option value="GBIME">GBIME</option>
+  <option value="HBL">HBL</option>
 </select>
 
 <div class="buy-sell-box">
-  <div class="box buy-box">🟢 BUY %<br><b id="buyPercent">--%</b></div>
-  <div class="box sell-box">🔴 SELL %<br><b id="sellPercent">--%</b></div>
+  <div class="box buy-box">🟢 BUY<br><span id="buyPercent">--%</span></div>
+  <div class="box sell-box">🔴 SELL<br><span id="sellPercent">--%</span></div>
 </div>
 
 <button class="scan-btn" onclick="scan()">🔍 SCAN SIGNAL</button>
 
 <script>
 let currentPrice = 0;
+let prevPrice = 0;
 
-// 3 OTA PROXY - 1 FAIL BHAYE ARKO CHALCHA
-const PROXIES = [
-  "https://api.allorigins.win/raw?url=",
-  "https://corsproxy.io/?",
-  "https://proxy.cors.sh/"
-];
-
-async function fetchWithProxy(url){
-  for(let proxy of PROXIES){
-    try{
-      let res = await fetch(proxy + encodeURIComponent(url));
-      if(res.ok){
-        let text = await res.text();
-        return text;
-      }
-    }catch(e){}
-  }
-  throw new Error("All proxies failed");
-}
+// 100% WORKING API - NO CORS
+const API_BASE = "https://nepse-data-api.vercel.app/api";
 
 async function loadData(){
   let stock = document.getElementById('stock').value;
   document.getElementById('stockName').innerText = stock;
   document.getElementById('livePrice').innerText = "Loading...";
-  document.getElementById('livePrice').className = "price-main loading";
 
   try {
-    // NEPSE website scrape
-    let html = await fetchWithProxy("https://www.nepalstock.com.np");
-    let parser = new DOMParser();
-    let doc = parser.parseFromString(html, 'text/html');
-
+    let res, data;
+    
     if(stock === "NEPSE"){
-      let indexEl = doc.querySelector('.index-value,.nepal-index.value');
-      let changeEl = doc.querySelector('.index-change,.nepal-index.change');
-      if(indexEl){
-        currentPrice = parseFloat(indexEl.innerText.replace(/,/g,''));
-        document.getElementById('livePrice').innerText = currentPrice.toFixed(2);
-        document.getElementById('priceChange').innerText = changeEl? changeEl.innerText : "--";
-      }
+      // NEPSE Index
+      res = await fetch(`${API_BASE}/market`);
+      data = await res.json();
+      currentPrice = data.index;
+      document.getElementById('livePrice').innerText = currentPrice.toFixed(2);
+      document.getElementById('priceChange').innerText = `Points: ${data.change} (${data.changePercent}%)`;
+      document.getElementById('priceChange').className = data.change >= 0? 'up' : 'down';
     } else {
-      let rows = doc.querySelectorAll('table tbody tr');
-      let found = false;
-      rows.forEach(row => {
-        let cells = row.querySelectorAll('td');
-        if(cells[1] && cells[1].innerText.trim().includes(stock)){
-          currentPrice = parseFloat(cells[4].innerText.replace(/,/g,'')); // LTP
-          let change = parseFloat(cells[5].innerText.replace(/,/g,''));
-          let changePercent = parseFloat(cells[6].innerText.replace('%',''));
-          document.getElementById('livePrice').innerText = currentPrice.toFixed(2);
-          document.getElementById('priceChange').innerText = `Rs.${change.toFixed(2)} (${changePercent.toFixed(2)}%)`;
-          document.getElementById('priceChange').className = change >= 0? 'up' : 'down';
-          found = true;
-        }
-      });
-      if(!found) throw new Error("Stock not found");
+      // Individual Stock
+      res = await fetch(`${API_BASE}/company/${stock}`);
+      data = await res.json();
+      currentPrice = data.ltp;
+      document.getElementById('livePrice').innerText = currentPrice.toFixed(2);
+      document.getElementById('priceChange').innerText = `Rs.${data.change} (${data.changePercent}%)`;
+      document.getElementById('priceChange').className = data.change >= 0? 'up' : 'down';
     }
 
-    document.getElementById('livePrice').className = "price-main";
-
     // BUY SELL %
-    let changeText = document.getElementById('priceChange').innerText;
-    let match = changeText.match(/\((.*)%\)/);
-    let changePercent = match? parseFloat(match[1]) : 0;
-    let buyPercent = 50 + (changePercent * 10);
+    let buyPercent = 50 + (parseFloat(data.changePercent) * 10);
     buyPercent = Math.max(15, Math.min(85, buyPercent));
     document.getElementById('buyPercent').innerText = buyPercent.toFixed(1) + '%';
     document.getElementById('sellPercent').innerText = (100-buyPercent).toFixed(1) + '%';
+
+    // PRICE ALERT Rs.5
+    if(prevPrice > 0 && Math.abs(currentPrice - prevPrice) >= 5){
+      speak(`${stock} Rs.${Math.abs(currentPrice - prevPrice).toFixed(2)} ले Move भयो`);
+    }
+    prevPrice = currentPrice;
 
     checkMarket();
 
   } catch(e){
     console.log(e);
     document.getElementById('livePrice').innerText = "Error";
-    document.getElementById('livePrice').className = "price-main down";
   }
 }
 
@@ -153,10 +116,10 @@ function scan(){
   let buyP = parseFloat(document.getElementById('buyPercent').innerText);
   let stock = document.getElementById('stock').value;
   if(buyP > 65){
-    speak(`${stock} मा Buy Signal`);
-    alert(`📈 BUY SIGNAL @ Rs.${currentPrice}`);
+    speak(`${stock} मा Buy Signal छ`);
+    alert(`📈 BUY SIGNAL\n${stock} @ Rs.${currentPrice}`);
   } else {
-    alert(`⚖️ NO SIGNAL`);
+    alert(`⚖️ NO SIGNAL. Wait गर्नु`);
   }
 }
 
@@ -166,7 +129,7 @@ function checkMarket(){
 }
 
 window.onload = loadData;
-setInterval(loadData, 20000);
+setInterval(loadData, 15000); // 15s मा update
 setInterval(checkMarket, 60000);
 </script>
 </body>
