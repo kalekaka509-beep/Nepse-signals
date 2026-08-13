@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>NEPSE Voice Alert Pro - Scraping</title>
+<title>NEPSE Voice Alert Pro - 3 Proxy</title>
 <style>
 * { margin: 0; padding: 0; }
 body { background: #0a0e27; color: white; font-family: Arial; padding: 10px; }
@@ -43,27 +43,19 @@ select, button { width: 100%; padding: 15px; margin: 8px 0; font-size: 16px; bac
   <div id="stockName">NEPSE</div>
   <div id="livePrice" class="price-main loading">Loading...</div>
   <div id="priceChange">--.-- (-%)</div>
-  <div id="lastUpdate" style="font-size:12px; margin-top:5px;">Last: --</div>
 </div>
 
 <select id="stock" onchange="loadData()">
   <option value="NEPSE">NEPSE Index</option>
-  <option value="NABIL">NABIL Bank</option>
-  <option value="SCB">Standard Chartered</option>
-  <option value="NICL">NIC Asia</option>
-  <option value="GBIME">Global IME</option>
-  <option value="HBL">Himalayan Bank</option>
+  <option value="NABIL">NABIL</option>
+  <option value="SCB">SCB</option>
+  <option value="NICL">NICL</option>
+  <option value="GBIME">GBIME</option>
 </select>
 
 <div class="buy-sell-box">
-  <div class="box buy-box">
-    🟢 BUY %<br>
-    <b id="buyPercent">--%</b>
-  </div>
-  <div class="box sell-box">
-    🔴 SELL %<br>
-    <b id="sellPercent">--%</b>
-  </div>
+  <div class="box buy-box">🟢 BUY %<br><b id="buyPercent">--%</b></div>
+  <div class="box sell-box">🔴 SELL %<br><b id="sellPercent">--%</b></div>
 </div>
 
 <button class="scan-btn" onclick="scan()">🔍 SCAN SIGNAL</button>
@@ -71,8 +63,25 @@ select, button { width: 100%; padding: 15px; margin: 8px 0; font-size: 16px; bac
 <script>
 let currentPrice = 0;
 
-// PROXY: Scraping को लागि CORS हटाउन
-const PROXY = "https://api.allorigins.win/raw?url=";
+// 3 OTA PROXY - 1 FAIL BHAYE ARKO CHALCHA
+const PROXIES = [
+  "https://api.allorigins.win/raw?url=",
+  "https://corsproxy.io/?",
+  "https://proxy.cors.sh/"
+];
+
+async function fetchWithProxy(url){
+  for(let proxy of PROXIES){
+    try{
+      let res = await fetch(proxy + encodeURIComponent(url));
+      if(res.ok){
+        let text = await res.text();
+        return text;
+      }
+    }catch(e){}
+  }
+  throw new Error("All proxies failed");
+}
 
 async function loadData(){
   let stock = document.getElementById('stock').value;
@@ -81,33 +90,28 @@ async function loadData(){
   document.getElementById('livePrice').className = "price-main loading";
 
   try {
-    // 1. NEPSE को website scrape गर्ने
-    let res = await fetch(PROXY + encodeURIComponent("https://www.nepalstock.com.np"));
-    let html = await res.text();
-
-    // 2. HTML बाट Price निकाल्ने
+    // NEPSE website scrape
+    let html = await fetchWithProxy("https://www.nepalstock.com.np");
     let parser = new DOMParser();
     let doc = parser.parseFromString(html, 'text/html');
 
     if(stock === "NEPSE"){
-      // NEPSE Index निकाल्ने
-      let indexEl = doc.querySelector('.index-value');
-      let changeEl = doc.querySelector('.index-change');
+      let indexEl = doc.querySelector('.index-value,.nepal-index.value');
+      let changeEl = doc.querySelector('.index-change,.nepal-index.change');
       if(indexEl){
         currentPrice = parseFloat(indexEl.innerText.replace(/,/g,''));
         document.getElementById('livePrice').innerText = currentPrice.toFixed(2);
         document.getElementById('priceChange').innerText = changeEl? changeEl.innerText : "--";
       }
     } else {
-      // Individual Stock को Table बाट खोज्ने
       let rows = doc.querySelectorAll('table tbody tr');
       let found = false;
       rows.forEach(row => {
         let cells = row.querySelectorAll('td');
-        if(cells[0] && cells[0].innerText.trim() === stock){
-          currentPrice = parseFloat(cells[3].innerText.replace(/,/g,'')); // LTP column
-          let change = parseFloat(cells[4].innerText.replace(/,/g,''));
-          let changePercent = parseFloat(cells[5].innerText.replace('%',''));
+        if(cells[1] && cells[1].innerText.trim().includes(stock)){
+          currentPrice = parseFloat(cells[4].innerText.replace(/,/g,'')); // LTP
+          let change = parseFloat(cells[5].innerText.replace(/,/g,''));
+          let changePercent = parseFloat(cells[6].innerText.replace('%',''));
           document.getElementById('livePrice').innerText = currentPrice.toFixed(2);
           document.getElementById('priceChange').innerText = `Rs.${change.toFixed(2)} (${changePercent.toFixed(2)}%)`;
           document.getElementById('priceChange').className = change >= 0? 'up' : 'down';
@@ -118,11 +122,11 @@ async function loadData(){
     }
 
     document.getElementById('livePrice').className = "price-main";
-    document.getElementById('lastUpdate').innerText = "Last: " + new Date().toLocaleTimeString();
 
-    // 3. BUY SELL % Calculate
+    // BUY SELL %
     let changeText = document.getElementById('priceChange').innerText;
-    let changePercent = parseFloat(changeText.match(/\((.*)%\)/)[1]);
+    let match = changeText.match(/\((.*)%\)/);
+    let changePercent = match? parseFloat(match[1]) : 0;
     let buyPercent = 50 + (changePercent * 10);
     buyPercent = Math.max(15, Math.min(85, buyPercent));
     document.getElementById('buyPercent').innerText = buyPercent.toFixed(1) + '%';
@@ -149,27 +153,21 @@ function scan(){
   let buyP = parseFloat(document.getElementById('buyPercent').innerText);
   let stock = document.getElementById('stock').value;
   if(buyP > 65){
-    let msg = `${stock} मा Buy Signal छ। Price Rs.${currentPrice}`;
-    speak(msg);
-    alert(`📈 BUY SIGNAL\n${msg}`);
-  } else if(buyP < 35){
-    let msg = `${stock} मा Sell Signal छ। Price Rs.${currentPrice}`;
-    speak(msg);
-    alert(`📉 SELL SIGNAL\n${msg}`);
+    speak(`${stock} मा Buy Signal`);
+    alert(`📈 BUY SIGNAL @ Rs.${currentPrice}`);
   } else {
-    alert(`⚖️ NO SIGNAL. Wait गर्नु`);
+    alert(`⚖️ NO SIGNAL`);
   }
 }
 
 function checkMarket(){
   let hour = new Date().toLocaleString('en-US', {hour:'2-digit', hour12:false, timeZone:'Asia/Kathmandu'});
-  let status = (hour >= 11 && hour < 15)? 'Market: OPEN ● LIVE' : 'Market: CLOSED';
-  document.getElementById('marketStatus').innerText = status;
+  document.getElementById('marketStatus').innerText = (hour >= 11 && hour < 15)? 'Market: OPEN ● LIVE' : 'Market: CLOSED';
 }
 
-window.onload = () => { loadData(); checkMarket(); }
-setInterval(loadData, 20000); // 20s मा Update
+window.onload = loadData;
+setInterval(loadData, 20000);
 setInterval(checkMarket, 60000);
 </script>
 </body>
-  </html>
+</html>
