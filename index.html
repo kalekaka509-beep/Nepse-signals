@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>NEPSE Voice Alert Pro - API</title>
+<title>NEPSE Live Price - Fixed</title>
 <style>
 * { margin: 0; padding: 0; }
 body { background: #0a0e27; color: white; font-family: Arial; padding: 10px; }
@@ -41,7 +41,6 @@ select, button { width: 100%; padding: 16px; margin: 8px 0; font-size: 17px; bac
   <option value="SCB">SCB</option>
   <option value="NICL">NICL</option>
   <option value="GBIME">GBIME</option>
-  <option value="HBL">HBL</option>
 </select>
 
 <div class="buy-sell-box">
@@ -53,10 +52,9 @@ select, button { width: 100%; padding: 16px; margin: 8px 0; font-size: 17px; bac
 
 <script>
 let currentPrice = 0;
-let prevPrice = 0;
 
-// 100% WORKING API - NO CORS
-const API_BASE = "https://nepse-data-api.vercel.app/api";
+// FINAL API - MERONEPSE
+const API_BASE = "https://merolagani.com/handlers/webreport.ashx";
 
 async function loadData(){
   let stock = document.getElementById('stock').value;
@@ -64,43 +62,43 @@ async function loadData(){
   document.getElementById('livePrice').innerText = "Loading...";
 
   try {
-    let res, data;
+    let url = "";
+    if(stock === "NEPSE"){
+      url = `${API_BASE}?type=indices&param1=1&param2=0`; // NEPSE Index
+    } else {
+      url = `${API_BASE}?type=companyprice&param1=${stock}`; // Individual
+    }
+
+    let res = await fetch("https://api.allorigins.win/raw?url=" + encodeURIComponent(url));
+    let data = await res.json();
     
     if(stock === "NEPSE"){
-      // NEPSE Index
-      res = await fetch(`${API_BASE}/market`);
-      data = await res.json();
-      currentPrice = data.index;
+      let nepse = data.find(x => x.indexname === "NEPSE");
+      currentPrice = parseFloat(nepse.indexvalue);
+      let change = parseFloat(nepse.change);
       document.getElementById('livePrice').innerText = currentPrice.toFixed(2);
-      document.getElementById('priceChange').innerText = `Points: ${data.change} (${data.changePercent}%)`;
-      document.getElementById('priceChange').className = data.change >= 0? 'up' : 'down';
+      document.getElementById('priceChange').innerText = `${change.toFixed(2)} (${nepse.percentchange}%)`;
+      document.getElementById('priceChange').className = change >= 0? 'up' : 'down';
     } else {
-      // Individual Stock
-      res = await fetch(`${API_BASE}/company/${stock}`);
-      data = await res.json();
-      currentPrice = data.ltp;
+      currentPrice = parseFloat(data[0].ltp);
+      let change = parseFloat(data[0].pricechange);
       document.getElementById('livePrice').innerText = currentPrice.toFixed(2);
-      document.getElementById('priceChange').innerText = `Rs.${data.change} (${data.changePercent}%)`;
-      document.getElementById('priceChange').className = data.change >= 0? 'up' : 'down';
+      document.getElementById('priceChange').innerText = `Rs.${change.toFixed(2)} (${data[0].percentchange}%)`;
+      document.getElementById('priceChange').className = change >= 0? 'up' : 'down';
     }
 
     // BUY SELL %
-    let buyPercent = 50 + (parseFloat(data.changePercent) * 10);
+    let cp = parseFloat(document.getElementById('priceChange').innerText.match(/\((.*)%\)/)[1]);
+    let buyPercent = 50 + (cp * 10);
     buyPercent = Math.max(15, Math.min(85, buyPercent));
     document.getElementById('buyPercent').innerText = buyPercent.toFixed(1) + '%';
     document.getElementById('sellPercent').innerText = (100-buyPercent).toFixed(1) + '%';
-
-    // PRICE ALERT Rs.5
-    if(prevPrice > 0 && Math.abs(currentPrice - prevPrice) >= 5){
-      speak(`${stock} Rs.${Math.abs(currentPrice - prevPrice).toFixed(2)} ले Move भयो`);
-    }
-    prevPrice = currentPrice;
 
     checkMarket();
 
   } catch(e){
     console.log(e);
-    document.getElementById('livePrice').innerText = "Error";
+    document.getElementById('livePrice').innerText = "API Error";
   }
 }
 
@@ -119,7 +117,7 @@ function scan(){
     speak(`${stock} मा Buy Signal छ`);
     alert(`📈 BUY SIGNAL\n${stock} @ Rs.${currentPrice}`);
   } else {
-    alert(`⚖️ NO SIGNAL. Wait गर्नु`);
+    alert(`⚖️ NO SIGNAL`);
   }
 }
 
@@ -129,8 +127,8 @@ function checkMarket(){
 }
 
 window.onload = loadData;
-setInterval(loadData, 15000); // 15s मा update
+setInterval(loadData, 15000);
 setInterval(checkMarket, 60000);
 </script>
 </body>
-</html>
+  </html>
